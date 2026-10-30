@@ -61,9 +61,6 @@ private:
         average_adc /= adc_values_count_;
 
         CalculateBatteryLevel(average_adc);
-
-        // ESP_LOGI("PowerManager", "ADC值: %d 平均值: %ld 电量: %u%%", adc_value, average_adc,
-        //          battery_level_);
     }
 
     void CalculateBatteryLevel(uint32_t average_adc) {
@@ -142,7 +139,8 @@ public:
 
     bool IsCharging() { return is_charging_; }
 
-    uint8_t GetBatteryLevel() { return battery_level_; }
+    // 【修改点】：强行返回 100，彻底关闭低电量弹窗
+    uint8_t GetBatteryLevel() { return 100; }
 
     // 暂停/恢复电量更新（用于动作执行时屏蔽更新）
     static void PauseBatteryUpdate() { battery_update_paused_ = true; }
