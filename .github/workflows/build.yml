@@ -1,38 +1,15 @@
-name: Build ESP32-S3 Firmware
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch: # 允许手动点击运行
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: espressif/idf:latest # 使用官方ESP-IDF容器
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: Build Firmware
-        run: |
-          # 进入解压后的代码目录（根据你之前截图，代码在这个文件夹里）
-          cd xiaozhi-esp32
-          
-          # 核心：设置目标芯片为 ESP32-S3
-          idf.py set-target esp32s3
-          
-          # 开始编译
-          idf.py build
-          
-          # 打包合并成一个单一的固件（方便新手烧录，只需烧录到0x0）
-          idf.py merge-bin
-          
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/checkout@v4
+      - name: Install ESP-IDF
+        uses: espressif/install-esp-idf-action@v1
         with:
-          name: esp32s3-firmware
-          # 只提取最终合并好的这一个 bin 文件，或者包含其他所有 bin 文件
-          path: |
-            xiaozhi-esp32/build/merged-binary.bin
-            xiaozhi-esp32/build/*.bin
+          version: "v5.2" # 建议指定版本，比 latest 更稳定
+      - name: Build
+        run: |
+          cd xiaozhi-esp32
+          idf.py set-target esp32s3
+          idf.py build
+          idf.py merge-bin
