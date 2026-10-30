@@ -34,12 +34,11 @@ Pca9685::~Pca9685() {
 }
 
 esp_err_t Pca9685::Init() {
-    ESP_LOGI(TAG, "Initializing PCA9685..."); 
+    ESP_LOGI(TAG, "Initializing PCA9685..."); // 消除之前那个 TAG 未使用的 Warning
     
     // 1. 初始化 I2C 总线
     i2c_master_bus_config_t i2c_mst_config = {};
     i2c_mst_config.clk_source = I2C_CLK_SRC_DEFAULT;
-    // 使用 I2C_NUM_1，避免与屏幕等外设冲突
     i2c_mst_config.i2c_port = I2C_NUM_1; 
     i2c_mst_config.scl_io_num = PCA9685_I2C_SCL_PIN;
     i2c_mst_config.sda_io_num = PCA9685_I2C_SDA_PIN;
