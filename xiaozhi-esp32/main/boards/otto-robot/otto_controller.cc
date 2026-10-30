@@ -8,12 +8,12 @@
 #include <driver/gpio.h>
 #include <esp_sleep.h>
 #include <freertos/timers.h> // 引入定时器
-
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
 #include <cstdlib> 
 #include <cstring>
+#include <string> // 补充 string 头文件，确保 std::string 正常使用
 
 #include "display.h"
 #include "application.h"
