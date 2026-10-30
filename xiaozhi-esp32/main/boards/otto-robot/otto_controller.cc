@@ -4,7 +4,7 @@
 
 #include <cJSON.h>
 #include <esp_log.h>
-#include "driver/i2c.h"
+#include <driver/i2c_master.h>
 #include <driver/gpio.h>
 #include <esp_sleep.h>
 #include <freertos/timers.h> // 引入定时器
@@ -12,6 +12,7 @@
 #include <cstdlib> 
 #include <cstring>
 
+#include "display.h"
 #include "application.h"
 #include "board.h"
 #include "config.h"
