@@ -9,6 +9,9 @@
 #include <esp_sleep.h>
 #include <freertos/timers.h> // 引入定时器
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 #include <cstdlib> 
 #include <cstring>
 
