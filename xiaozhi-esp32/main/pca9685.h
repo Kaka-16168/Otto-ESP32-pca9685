@@ -3,6 +3,7 @@
 
 #include <driver/i2c_master.h>
 #include <esp_err.h>
+#include <cstdint>
 
 // PCA9685 默认 I2C 地址 (如果不确定，可以用 I2C 扫描工具查看，通常是 0x40)
 #define PCA9685_I2C_ADDR 0x40
