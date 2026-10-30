@@ -1,4 +1,4 @@
-name: Build ESP32-S3 Firmware (Otto Robot)
+name: Build ESP32-S3 Firmware
 
 on:
   push:
@@ -8,7 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: espressif/idf:release-v5.2  # 固定版本，避免最新版环境变动导致报错
+    # 指定官方正式发布的 v6.0.1 镜像标签，满足代码的版本要求
+    container: espressif/idf:v6.0.1 
     
     steps:
       - name: Checkout code
@@ -18,25 +19,12 @@ jobs:
         run: |
           . $IDF_PATH/export.sh
           cd xiaozhi-esp32
-          
-          # 1. 指定目标芯片
           idf.py set-target esp32s3
-          
-          # 2. 终极防错：删除旧的 sdkconfig，确保修改生效
-          rm -f sdkconfig
-          
-          # 3. 核心修改：强制把默认板型替换为 OTTO_ROBOT
-          sed -i 's/CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD=y/CONFIG_BOARD_TYPE_OTTO_ROBOT=y/g' sdkconfig.defaults || true
-          echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
-          
-          # 4. 开始编译
           idf.py build
-          
-          # 5. 合并成单一固件（方便烧录）
           idf.py merge-bin
           
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-otto-firmware
+          name: esp32s3-firmware
           path: xiaozhi-esp32/build/merged-binary.bin
