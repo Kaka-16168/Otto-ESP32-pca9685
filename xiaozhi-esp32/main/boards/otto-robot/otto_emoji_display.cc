@@ -1,324 +1,143 @@
-#include "websocket_control_server.h"
-#include "mcp_server.h"
+#include "otto_emoji_display.h"
+
 #include <esp_log.h>
-#include <esp_http_server.h>
-#include <cJSON.h>          // 显式引入 cJSON，防止编译报错
-#include <sys/param.h>
+
 #include <cstring>
-#include <cstdlib>
-#include <map>
+#include <vector>
 
-static const char* TAG = "WSControl";
+#include "assets.h"
+#include "assets/lang_config.h"
+#include "display/lvgl_display/emoji_collection.h"
+#include "display/lvgl_display/lvgl_image.h"
+#include "display/lvgl_display/lvgl_theme.h"
 
-WebSocketControlServer* WebSocketControlServer::instance_ = nullptr;
+#define TAG "OttoEmojiDisplay"
+OttoEmojiDisplay::OttoEmojiDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
+                                   int width, int height, int offset_x, int offset_y, bool mirror_x,
+                                   bool mirror_y, bool swap_xy)
+    : SpiLcdDisplay(panel_io, panel, width, height, offset_x, offset_y, mirror_x, mirror_y,
+                    swap_xy) {}
 
-WebSocketControlServer::WebSocketControlServer() : server_handle_(nullptr) {
-    instance_ = this;
+void OttoEmojiDisplay::SetupUI() {
+    // Prevent duplicate calls - parent SetupUI() will also check, but check here for early return
+    if (setup_ui_called_) {
+        ESP_LOGW(TAG, "SetupUI() called multiple times, skipping duplicate call");
+        return;
+    }
+
+    // Call parent SetupUI() first to create all lvgl objects
+    SpiLcdDisplay::SetupUI();
+
+    // UI 对象创建完成后切换主题
+    auto* dark_theme = LvglThemeManager::GetInstance().GetTheme("dark");
+    if (dark_theme != nullptr) {
+        SetTheme(dark_theme);
+    }
+
+    // Setup preview image after UI is initialized - release lock before calling SetEmotion
+    // to avoid deadlock (SetEmotion also acquires DisplayLockGuard internally)
+    {
+        DisplayLockGuard lock(this);
+        lv_obj_set_size(preview_image_, width_, height_);
+    }
+
+    // Set default emotion after UI is initialized
+    SetEmotion("staticstate");
 }
 
-WebSocketControlServer::~WebSocketControlServer() {
-    Stop();
-    instance_ = nullptr;
+void OttoEmojiDisplay::SetupPreviewImage() {
+    DisplayLockGuard lock(this);
+    if (preview_image_ == nullptr) {
+        ESP_LOGW(TAG,
+                 "SetupPreviewImage called but preview_image_ is nullptr (UI not initialized yet)");
+        return;
+    }
+    lv_obj_set_size(preview_image_, width_, height_);
 }
 
-// --- 新增：处理杂项探测请求，消除 404 报错 ---
-static esp_err_t catch_all_handler(httpd_req_t *req) {
-    // 返回一个简单的响应，让客户端知道请求被收到了
-    // 这样设备串口就不会再疯狂刷 404 Not Found 报错了
-    httpd_resp_send(req, "OK", HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
+void OttoEmojiDisplay::InitializeOttoEmojis() {
+    ESP_LOGI(TAG, "Otto表情初始化将由Assets系统处理");
+    // 表情初始化已移至assets系统,通过DEFAULT_EMOJI_COLLECTION=otto-gif配置
+    // assets.cc会从assets分区加载GIF表情并设置到theme
+    // Note: Default emotion is now set in SetupUI() after LVGL objects are created
 }
-// ---------------------------------------------
 
-esp_err_t WebSocketControlServer::ws_handler(httpd_req_t *req) {
-    if (instance_ == nullptr) {
-        return ESP_FAIL;
+LV_FONT_DECLARE(OTTO_ICON_FONT);
+void OttoEmojiDisplay::SetStatus(const char* status) {
+    auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
+    auto text_font = lvgl_theme->text_font()->font();
+    DisplayLockGuard lock(this);
+    if (!status) {
+        ESP_LOGE(TAG, "SetStatus: status is nullptr");
+        return;
     }
-    
-    if (req->method == HTTP_GET) {
-        ESP_LOGI(TAG, "Handshake done, the new connection was opened");
-        instance_->AddClient(req);
-        return ESP_OK;
+
+    if (strcmp(status, Lang::Strings::LISTENING) == 0) {
+        lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
+        lv_label_set_text(status_label_, "\xEF\x84\xB0");  // U+F130 麦克风图标
+        lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
+        return;
+    } else if (strcmp(status, Lang::Strings::SPEAKING) == 0) {
+        lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
+        lv_label_set_text(status_label_, "\xEF\x80\xA8");  // U+F028 说话图标
+        lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
+        return;
+    } else if (strcmp(status, Lang::Strings::CONNECTING) == 0) {
+        lv_obj_set_style_text_font(status_label_, &OTTO_ICON_FONT, 0);
+        lv_label_set_text(status_label_, "\xEF\x83\x81");  // U+F0c1 连接图标
+        lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        return;
+    } else if (strcmp(status, Lang::Strings::STANDBY) == 0) {
+        lv_obj_set_style_text_font(status_label_, text_font, 0);
+        lv_label_set_text(status_label_, "");
+        lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
+        return;
     }
-    
-    httpd_ws_frame_t ws_pkt;
-    uint8_t *buf = NULL;
-    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    
-    /* Set max_len = 0 to get the frame len */
-    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "httpd_ws_recv_frame failed to get frame len with %d", ret);
-        return ret;
+
+    lv_obj_set_style_text_font(status_label_, text_font, 0);
+    lv_label_set_text(status_label_, status);
+}
+
+void OttoEmojiDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
+    DisplayLockGuard lock(this);
+    if (preview_image_ == nullptr) {
+        ESP_LOGE(TAG, "Preview image is not initialized");
+        return;
     }
-    ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
-    
-    if (ws_pkt.len) {
-        /* ws_pkt.len + 1 is for NULL termination as we are expecting a string */
-        buf = (uint8_t*)calloc(1, ws_pkt.len + 1);
-        if (buf == NULL) {
-            ESP_LOGE(TAG, "Failed to calloc memory for buf");
-            return ESP_ERR_NO_MEM;
+
+    if (image == nullptr) {
+        esp_timer_stop(preview_timer_);
+        lv_obj_remove_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
+        preview_image_cached_.reset();
+        if (gif_controller_) {
+            gif_controller_->Start();
         }
-        ws_pkt.payload = buf;
-        /* Set max_len = ws_pkt.len to get the frame payload */
-        ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "httpd_ws_recv_frame failed with %d", ret);
-            free(buf);
-            return ret;
-        }
-        ESP_LOGI(TAG, "Got packet with message: %s", ws_pkt.payload);
-    }
-    
-    ESP_LOGI(TAG, "Packet type: %d", ws_pkt.type);
-    
-    if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
-        ESP_LOGI(TAG, "WebSocket close frame received");
-        instance_->RemoveClient(req);
-        free(buf);
-        return ESP_OK;
-    }
-    
-    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
-        if (ws_pkt.len > 0 && buf != nullptr) {
-            buf[ws_pkt.len] = '\0';
-            instance_->HandleMessage(req, (const char*)buf, ws_pkt.len);
-        }
-    } else {
-        ESP_LOGW(TAG, "Unsupported frame type: %d", ws_pkt.type);
-    }
-    
-    free(buf);
-    return ESP_OK;
-}
-
-bool WebSocketControlServer::Start(int port) {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port = port;
-    config.max_open_sockets = 7;
-    config.ctrl_port = 32769;
-
-    // 原有 WebSocket 路由
-    httpd_uri_t ws_uri = {
-        .uri = "/ws",
-        .method = HTTP_GET,
-        .handler = ws_handler,
-        .user_ctx = nullptr,
-        .is_websocket = true
-    };
-
-    // --- 新增：注册拦截路由 ---
-    // 拦截 /mmttls/* 以及根路径下的其他未定义请求，防止刷屏
-    httpd_uri_t mmttls_uri = {
-        .uri = "/mmttls/*",
-        .method = HTTP_GET,
-        .handler = catch_all_handler,
-        .user_ctx = nullptr
-    };
-    
-    httpd_uri_t favicon_uri = {
-        .uri = "/favicon.ico",
-        .method = HTTP_GET,
-        .handler = catch_all_handler,
-        .user_ctx = nullptr
-    };
-    // ---------------------------
-
-    if (httpd_start(&server_handle_, &config) == ESP_OK) {
-        // 注册原有 WebSocket
-        httpd_register_uri_handler(server_handle_, &ws_uri);
-        
-        // 注册新增的拦截器
-        httpd_register_uri_handler(server_handle_, &mmttls_uri);
-        httpd_register_uri_handler(server_handle_, &favicon_uri);
-        
-        ESP_LOGI(TAG, "WebSocket server started on port %d", port);
-        return true;
-    }
-
-    ESP_LOGE(TAG, "Failed to start WebSocket server");
-    return false;
-}
-
-void WebSocketControlServer::Stop() {
-    if (server_handle_) {
-        httpd_stop(server_handle_);
-        server_handle_ = nullptr;
-        clients_.clear();
-        ESP_LOGI(TAG, "WebSocket server stopped");
-    }
-}
-
-void WebSocketControlServer::HandleMessage(httpd_req_t *req, const char* data, size_t len) {
-    if (data == nullptr || len == 0) {
-        ESP_LOGE(TAG, "Invalid message: data is null or len is 0");
-        return;
-    }
-    
-    if (len > 4096) {
-        ESP_LOGE(TAG, "Message too long: %zu bytes", len);
-        return;
-    }
-    
-    char* temp_buf = (char*)malloc(len + 1);
-    if (temp_buf == nullptr) {
-        ESP_LOGE(TAG, "Failed to allocate memory");
-        return;
-    }
-    memcpy(temp_buf, data, len);
-    temp_buf[len] = '\0';
-    
-    cJSON* root = cJSON_Parse(temp_buf);
-    free(temp_buf);
-    
-    if (root == nullptr) {
-        ESP_LOGE(TAG, "Failed to parse JSON");
         return;
     }
 
-    int sock_fd = httpd_req_to_sockfd(req);
-    uint64_t client_id = GetClientId(req);
-    if (client_id == 0) {
-        ESP_LOGW(TAG, "Ignoring message from unknown client: %d", sock_fd);
-        cJSON_Delete(root);
-        return;
+    preview_image_cached_ = std::move(image);
+    auto img_dsc = preview_image_cached_->image_dsc();
+    // 设置图片源并显示预览图片
+    lv_image_set_src(preview_image_, img_dsc);
+    lv_image_set_rotation(preview_image_, 900);
+    if (img_dsc->header.w > 0 && img_dsc->header.h > 0) {
+        // zoom factor 1.0
+        lv_image_set_scale(preview_image_, 256 * width_ / img_dsc->header.w);
     }
 
-    auto response_sender = [sock_fd, client_id](const std::string& payload) {
-        if (WebSocketControlServer::instance_) {
-            WebSocketControlServer::instance_->SendMessage(sock_fd, client_id, payload);
-        }
-    };
-
-    // 支持两种格式：
-    // 1. 完整格式：{"type":"mcp","payload":{...}}
-    // 2. 简化格式：直接是MCP payload对象
-    
-    cJSON* payload = nullptr;
-    cJSON* type = cJSON_GetObjectItem(root, "type");
-    
-    if (type && cJSON_IsString(type) && strcmp(type->valuestring, "mcp") == 0) {
-        payload = cJSON_GetObjectItem(root, "payload");
-        if (payload != nullptr) {
-            cJSON_DetachItemViaPointer(root, payload);
-            McpServer::GetInstance().ParseMessage(payload, response_sender);
-            cJSON_Delete(payload); 
-        }
-    } else {
-        payload = cJSON_Duplicate(root, 1);
-        if (payload != nullptr) {
-            McpServer::GetInstance().ParseMessage(payload, response_sender);
-            cJSON_Delete(payload);
-        }
+    // Hide emoji_box_
+    if (gif_controller_) {
+        gif_controller_->Stop();
     }
-    
-    if (payload == nullptr) {
-        ESP_LOGE(TAG, "Invalid message format or failed to parse");
-    }
-
-    cJSON_Delete(root);
-}
-
-void WebSocketControlServer::AddClient(httpd_req_t *req) {
-    int sock_fd = httpd_req_to_sockfd(req);
-    if (clients_.find(sock_fd) == clients_.end()) {
-        uint64_t client_id = ++next_client_id_;
-        clients_[sock_fd] = ClientInfo{
-            .client_id = client_id
-        };
-        ESP_LOGI(TAG, "Client connected: %d id=%llu (total: %zu)", sock_fd, (unsigned long long)client_id, clients_.size());
-    }
-}
-
-void WebSocketControlServer::RemoveClient(httpd_req_t *req) {
-    int sock_fd = httpd_req_to_sockfd(req);
-    clients_.erase(sock_fd);
-    ESP_LOGI(TAG, "Client disconnected: %d (total: %zu)", sock_fd, clients_.size());
-}
-
-size_t WebSocketControlServer::GetClientCount() const {
-    return clients_.size();
-}
-
-uint64_t WebSocketControlServer::GetClientId(httpd_req_t *req) const {
-    int sock_fd = httpd_req_to_sockfd(req);
-    auto it = clients_.find(sock_fd);
-    if (it == clients_.end()) {
-        return 0;
-    }
-    return it->second.client_id;
-}
-
-struct WsBroadcastJob {
-    httpd_handle_t server;
-    int fd;
-    char* payload;
-    size_t len;
-};
-
-static void ws_broadcast_send_job(void* arg) {
-    WsBroadcastJob* job = static_cast<WsBroadcastJob*>(arg);
-
-    httpd_ws_frame_t ws_pkt = {};
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    ws_pkt.payload = reinterpret_cast<uint8_t*>(job->payload);
-    ws_pkt.len = job->len;
-    ws_pkt.final = true;
-
-    esp_err_t ret = httpd_ws_send_frame_async(job->server, job->fd, &ws_pkt);
-    if (ret != ESP_OK) {
-        ESP_LOGE("WSControl", "BroadcastMessage: send failed fd=%d err=%d", job->fd, ret);
-    }
-
-    free(job->payload);
-    free(job);
-}
-
-void WebSocketControlServer::BroadcastMessage(const std::string& message) {
-    if (!server_handle_ || clients_.empty()) {
-        return;
-    }
-
-    for (auto& [fd, client] : clients_) {
-        SendMessage(fd, client.client_id, message);
-    }
-}
-
-void WebSocketControlServer::SendMessage(int sock_fd, uint64_t client_id, const std::string& message) {
-    if (!server_handle_) {
-        return;
-    }
-
-    auto client = clients_.find(sock_fd);
-    if (client == clients_.end() || client->second.client_id != client_id) {
-        ESP_LOGW(TAG, "Skip send to stale client fd=%d id=%llu", sock_fd, (unsigned long long)client_id);
-        return;
-    }
-
-    WsBroadcastJob* job = static_cast<WsBroadcastJob*>(malloc(sizeof(WsBroadcastJob)));
-    if (!job) {
-        ESP_LOGE(TAG, "SendMessage: failed to allocate job");
-        return;
-    }
-
-    job->server = server_handle_;
-    job->fd = sock_fd;
-    job->len = message.length();
-    job->payload = static_cast<char*>(malloc(message.length() + 1));
-    if (!job->payload) {
-        ESP_LOGE(TAG, "SendMessage: failed to allocate payload");
-        free(job);
-        return;
-    }
-    memcpy(job->payload, message.c_str(), message.length());
-    job->payload[message.length()] = '\0';
-
-    esp_err_t ret = httpd_queue_work(server_handle_, ws_broadcast_send_job, job);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "SendMessage: httpd_queue_work failed fd=%d err=%d", sock_fd, ret);
-        free(job->payload);
-        free(job);
-    }
+    lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
+    esp_timer_stop(preview_timer_);
+    ESP_ERROR_CHECK(esp_timer_start_once(preview_timer_, PREVIEW_IMAGE_DURATION_MS * 1000));
 }
