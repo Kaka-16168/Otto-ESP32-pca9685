@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 指定官方正式发布的 v6.0.1 镜像标签
     container: espressif/idf:v6.0.1 
     
     steps:
@@ -20,17 +19,19 @@ jobs:
           . $IDF_PATH/export.sh
           cd xiaozhi-esp32
           
-          # 1. 清除旧配置，确保接下来写入的是全新配置
+          # 1. 彻底清理旧配置，防止默认的 SSD1306 驱动混进来
           rm -f sdkconfig
           
-          # 2. 注入 Otto 机器人和 WebSocket 支持配置
+          # 2. 强制选中 Otto 机器人板型（这是核心！）
           echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
+          
+          # 3. 强制开启 WebSocket 功能（之前报错的原因）
           echo "CONFIG_HTTPD_WS_SUPPORT=y" >> sdkconfig.defaults
           
-          # 3. 设置目标芯片（这一步会读取上面的 defaults 生成正确的 sdkconfig）
+          # 4. 设置目标芯片
           idf.py set-target esp32s3
           
-          # 4. 编译并打包
+          # 5. 编译并打包
           idf.py build
           idf.py merge-bin
           
