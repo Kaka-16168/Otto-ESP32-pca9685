@@ -1,0 +1,27 @@
+name: Build ESP32 Firmware
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # 允许在网页上手动点击运行
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: espressif/idf:latest # 使用官方ESP-IDF容器，免配置环境
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build Firmware
+        run: |
+          cd xiaozhi-esp32
+          # 如果项目根目录就是代码，去掉上一行；如果代码在子目录，保留cd命令
+          idf.py build
+          
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-bin
+          path: xiaozhi-esp32/build/*.bin # 收集编译生成的.bin文件
