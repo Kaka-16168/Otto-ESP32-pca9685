@@ -8,8 +8,9 @@
 #define OTTO_VERSION_CAMERA 1
 #define OTTO_VERSION_NO_CAMERA 2
 
+// 强制指定为无摄像头版本（因为你的外设中不包含摄像头）
 #ifndef OTTO_HARDWARE_VERSION
-#define OTTO_HARDWARE_VERSION OTTO_VERSION_AUTO
+#define OTTO_HARDWARE_VERSION OTTO_VERSION_NO_CAMERA
 #endif
 
 enum OttoCameraType {
@@ -101,17 +102,22 @@ constexpr HardwareConfig CAMERA_VERSION_CONFIG = {
     .i2c_scl_pin = GPIO_NUM_16,
 };
 
+// ==========================================
+// 以下为你定制的 NON_CAMERA_VERSION_CONFIG
+// ==========================================
 constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
-    .power_charge_detect_pin = GPIO_NUM_21,
+    .power_charge_detect_pin = GPIO_NUM_NC, // 原21改为NC，避开屏幕背光引脚
     .power_adc_unit = ADC_UNIT_2,
     .power_adc_channel = ADC_CHANNEL_3,
 
+    // 注意：如果你使用 PCA9685 (I2C) 来控制舵机，以下引脚其实不会被使用。
+    // 但为了防止底层代码调用报错，这里保留了未与其他功能冲突的引脚。
     .right_leg_pin = GPIO_NUM_39,
     .right_foot_pin = GPIO_NUM_38,
     .left_leg_pin = GPIO_NUM_17,
     .left_foot_pin = GPIO_NUM_18,
-    .left_hand_pin = GPIO_NUM_8,
-    .right_hand_pin = GPIO_NUM_12,
+    .left_hand_pin = GPIO_NUM_41,  // 原8改为41，避开 I2C
+    .right_hand_pin = GPIO_NUM_42, // 原12改为42，避开屏幕CLK
 
     .audio_input_sample_rate = 16000,
     .audio_output_sample_rate = 24000,
@@ -122,6 +128,7 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .audio_i2s_gpio_din = GPIO_NUM_NC,
     .audio_i2s_gpio_dout = GPIO_NUM_NC,
 
+    // ---- 音频引脚配置 (匹配你的模块) ----
     .audio_i2s_mic_gpio_ws = GPIO_NUM_4,
     .audio_i2s_mic_gpio_sck = GPIO_NUM_5,
     .audio_i2s_mic_gpio_din = GPIO_NUM_6,
@@ -129,15 +136,17 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
     .audio_i2s_spk_gpio_bclk = GPIO_NUM_15,
     .audio_i2s_spk_gpio_lrck = GPIO_NUM_16,
 
-    .display_backlight_pin = GPIO_NUM_3,
-    .display_mosi_pin = GPIO_NUM_10,
-    .display_clk_pin = GPIO_NUM_9,
-    .display_dc_pin = GPIO_NUM_46,
-    .display_rst_pin = GPIO_NUM_11,
-    .display_cs_pin = GPIO_NUM_12,
+    // ---- 屏幕引脚配置 (匹配你的接线) ----
+    .display_backlight_pin = GPIO_NUM_21,
+    .display_mosi_pin = GPIO_NUM_11,
+    .display_clk_pin = GPIO_NUM_12,
+    .display_dc_pin = GPIO_NUM_13,
+    .display_rst_pin = GPIO_NUM_10,
+    .display_cs_pin = GPIO_NUM_14,
 
-    .i2c_sda_pin = GPIO_NUM_NC,
-    .i2c_scl_pin = GPIO_NUM_NC,
+    // ---- PCA9685 预留 I2C 引脚 ----
+    .i2c_sda_pin = GPIO_NUM_8,
+    .i2c_scl_pin = GPIO_NUM_9,
 };
 
 #define CAMERA_XCLK (GPIO_NUM_3)
@@ -158,6 +167,7 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
 #define LEDC_TIMER (LEDC_TIMER_0)
 #define LEDC_CHANNEL (LEDC_CHANNEL_0)
 
+// 屏幕硬件特性
 #define LCD_TYPE_ST7789_SERIAL
 #define DISPLAY_WIDTH 240
 #define DISPLAY_HEIGHT 240
@@ -173,4 +183,4 @@ constexpr HardwareConfig NON_CAMERA_VERSION_CONFIG = {
 
 #define BOOT_BUTTON_GPIO GPIO_NUM_0
 
-#endif
+#endif // _BOARD_CONFIG_H_
