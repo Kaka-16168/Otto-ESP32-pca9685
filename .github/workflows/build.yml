@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 指定官方正式发布的 v6.0.1 镜像标签，满足代码的版本要求
     container: espressif/idf:v6.0.1 
     
     steps:
@@ -19,6 +18,17 @@ jobs:
         run: |
           . $IDF_PATH/export.sh
           cd xiaozhi-esp32
+          
+          # 1. 清理可能残留的旧配置
+          rm -f sdkconfig
+          
+          # 2. 注入核心配置（强制开启 Otto 板型、开启 WebSocket、开启 N16R8 的 PSRAM）
+          echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
+          echo "CONFIG_HTTPD_WS_SUPPORT=y" >> sdkconfig.defaults
+          echo "CONFIG_SPIRAM=y" >> sdkconfig.defaults
+          echo "CONFIG_SPIRAM_MODE_OCT=y" >> sdkconfig.defaults
+          
+          # 3. 设置目标芯片并编译
           idf.py set-target esp32s3
           idf.py build
           idf.py merge-bin
