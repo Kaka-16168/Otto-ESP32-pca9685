@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 指定官方正式发布的 v6.0.1 镜像标签，满足代码的版本要求
+    # 指定官方正式发布的 v6.0.1 镜像标签
     container: espressif/idf:v6.0.1 
     
     steps:
@@ -19,7 +19,17 @@ jobs:
         run: |
           . $IDF_PATH/export.sh
           cd xiaozhi-esp32
+          
+          # 【核心修改 1】：强制写入 otto-robot 板型配置到 defaults
+          echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
+          
+          # 【核心修改 2】：删除可能存在的旧 sdkconfig，确保上面的配置强制生效
+          rm -f sdkconfig
+          
+          # 设置目标芯片
           idf.py set-target esp32s3
+          
+          # 编译并打包
           idf.py build
           idf.py merge-bin
           
