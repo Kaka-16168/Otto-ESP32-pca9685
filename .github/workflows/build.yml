@@ -20,16 +20,17 @@ jobs:
           . $IDF_PATH/export.sh
           cd xiaozhi-esp32
           
-          # 【核心修改 1】：强制写入 otto-robot 板型配置到 defaults
-          echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
-          
-          # 【核心修改 2】：删除可能存在的旧 sdkconfig，确保上面的配置强制生效
+          # 1. 清除旧配置，确保接下来写入的是全新配置
           rm -f sdkconfig
           
-          # 设置目标芯片
+          # 2. 注入 Otto 机器人和 WebSocket 支持配置
+          echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
+          echo "CONFIG_HTTPD_WS_SUPPORT=y" >> sdkconfig.defaults
+          
+          # 3. 设置目标芯片（这一步会读取上面的 defaults 生成正确的 sdkconfig）
           idf.py set-target esp32s3
           
-          # 编译并打包
+          # 4. 编译并打包
           idf.py build
           idf.py merge-bin
           
