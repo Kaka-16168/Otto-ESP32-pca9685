@@ -26,71 +26,57 @@
 #define TAG "OttoController"
 
 // --- PCA9685 配置区 ---
-#define PCA9685_I2C_PORT    I2C_NUM_0
+#define PCA9685_I2C_PORT    I2C_NUM_1 // 修改为 1，避开可能的屏幕总线冲突
 #define PCA9685_SDA_PIN     8
 #define PCA9685_SCL_PIN     9
 #define PCA9685_I2C_FREQ    100000
 #define PCA9685_ADDR        0x40
-#define DISPLAY_BL_PIN      GPIO_NUM_42
+#define DISPLAY_BL_PIN      GPIO_NUM_21 // 改为你的实际背光引脚
 // ----------------------
 
+static i2c_master_bus_handle_t pca_i2c_bus = nullptr;
+static i2c_master_dev_handle_t pca_i2c_dev = nullptr;
+
+// 重写为新版 I2C API
+static void PCA9685_WriteReg(uint8_t reg, uint8_t data) {
+    if (!pca_i2c_dev) return;
+    uint8_t buf[2] = {reg, data};
+    i2c_master_transmit(pca_i2c_dev, buf, 2, 100);
+}
+
 static void PCA9685_Init() {
-    i2c_config_t conf = {};
-    conf.mode = I2C_MODE_MASTER;
-    conf.sda_io_num = (gpio_num_t)PCA9685_SDA_PIN;
-    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_io_num = (gpio_num_t)PCA9685_SCL_PIN;
-    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.master.clk_speed = PCA9685_I2C_FREQ;
-    
-    i2c_param_config(PCA9685_I2C_PORT, &conf);
-    i2c_driver_install(PCA9685_I2C_PORT, conf.mode, 0, 0, 0);
+    if (pca_i2c_bus != nullptr) return; // 防止重复初始化
 
-    uint8_t mode1 = 0x10; 
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (PCA9685_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, 0x00, true); 
-    i2c_master_write_byte(cmd, mode1, true); 
-    i2c_master_stop(cmd);
-    i2c_master_cmd_begin(PCA9685_I2C_PORT, cmd, pdMS_TO_TICKS(1000));
-    i2c_cmd_link_delete(cmd);
+    i2c_master_bus_config_t i2c_mst_config = {};
+    i2c_mst_config.clk_source = I2C_CLK_SRC_DEFAULT;
+    i2c_mst_config.i2c_port = PCA9685_I2C_PORT;
+    i2c_mst_config.scl_io_num = (gpio_num_t)PCA9685_SCL_PIN;
+    i2c_mst_config.sda_io_num = (gpio_num_t)PCA9685_SDA_PIN;
+    i2c_mst_config.glitch_ignore_cnt = 7;
+    i2c_mst_config.flags.enable_internal_pullup = true;
 
-    uint8_t prescale = 121;
-    cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (PCA9685_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, 0xFE, true); 
-    i2c_master_write_byte(cmd, prescale, true); 
-    i2c_master_stop(cmd);
-    i2c_master_cmd_begin(PCA9685_I2C_PORT, cmd, pdMS_TO_TICKS(1000));
-    i2c_cmd_link_delete(cmd);
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &pca_i2c_bus));
 
-    mode1 = 0x00; 
-    cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (PCA9685_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, 0x00, true);
-    i2c_master_write_byte(cmd, mode1, true);
-    i2c_master_stop(cmd);
-    i2c_master_cmd_begin(PCA9685_I2C_PORT, cmd, pdMS_TO_TICKS(1000));
-    i2c_cmd_link_delete(cmd);
+    i2c_device_config_t dev_cfg = {};
+    dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev_cfg.device_address = PCA9685_ADDR;
+    dev_cfg.scl_speed_hz = PCA9685_I2C_FREQ;
+
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(pca_i2c_bus, &dev_cfg, &pca_i2c_dev));
+
+    // 初始化寄存器 (50Hz)
+    PCA9685_WriteReg(0x00, 0x10); // Sleep
+    PCA9685_WriteReg(0xFE, 121);  // Prescale
+    PCA9685_WriteReg(0x00, 0x00); // Wake
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 void SetServoAngle(uint8_t channel, int angle) {
+    if (!pca_i2c_dev) return;
     int pulse = 102 + (angle * (512 - 102) / 180);
     uint8_t reg = 0x06 + 4 * channel;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (PCA9685_ADDR << 1) | I2C_MASTER_WRITE, true);
-    i2c_master_write_byte(cmd, reg, true);
-    i2c_master_write_byte(cmd, 0, true);
-    i2c_master_write_byte(cmd, 0, true);
-    i2c_master_write_byte(cmd, pulse & 0xFF, true);
-    i2c_master_write_byte(cmd, pulse >> 8, true);
-    i2c_master_stop(cmd);
-    i2c_master_cmd_begin(PCA9685_I2C_PORT, cmd, pdMS_TO_TICKS(1000));
-    i2c_cmd_link_delete(cmd);
+    uint8_t buf[5] = {reg, 0, 0, (uint8_t)(pulse & 0xFF), (uint8_t)(pulse >> 8)};
+    i2c_master_transmit(pca_i2c_dev, buf, 5, 100);
 }
 
 class OttoController {
