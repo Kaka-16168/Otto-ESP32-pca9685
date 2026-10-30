@@ -41,7 +41,7 @@ set(SOURCES "audio/audio_codec.cc"
             "device_state_machine.cc"
             "assets.cc"
             "main.cc"
-            "pca9685.cc"  # <--- 添加了 PCA9685 驱动源文件
+            # 注意：删除了 "pca9685.cc"，因为 otto_controller.cc 中已经包含
             )
 
 set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols")
@@ -1146,6 +1146,7 @@ idf_component_register(SRCS ${SOURCES}
                         efuse
                         bt
                         fatfs
+                        esp_http_server  # <--- 添加了 WebSocket 服务器依赖
                         xiaozhi-fonts
                         ${MAIN_PRIV_REQUIRES_EXTRA}
                     )
