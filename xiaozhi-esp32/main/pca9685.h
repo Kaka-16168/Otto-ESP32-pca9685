@@ -1,7 +1,7 @@
 #ifndef _PCA9685_H_
 #define _PCA9685_H_
 
-#include <driver/i2c.h>
+#include <driver/i2c_master.h>
 #include <esp_err.h>
 
 // PCA9685 默认 I2C 地址 (如果不确定，可以用 I2C 扫描工具查看，通常是 0x40)
