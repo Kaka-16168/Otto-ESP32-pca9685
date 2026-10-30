@@ -2,7 +2,8 @@
 #include "boards/bread-compact-wifi-lcd/config.h" // 引入你之前修改的引脚配置
 #include <esp_log.h>
 #include <math.h>
-
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 static const char *TAG = "PCA9685";
 
 // PCA9685 寄存器地址
