@@ -1,4 +1,4 @@
-name: Build ESP32-S3 Firmware
+name: Build ESP32-S3 Firmware (Otto Robot)
 
 on:
   push:
@@ -16,23 +16,21 @@ jobs:
         
       - name: Build Firmware
         run: |
-          # 关键修复：加载 ESP-IDF 环境，让系统能找到 idf.py
           . $IDF_PATH/export.sh
-          
-          # 进入项目目录（根据你的截图，代码在这个文件夹里）
           cd xiaozhi-esp32
           
-          # 设置目标芯片为 ESP32-S3
           idf.py set-target esp32s3
           
-          # 开始编译
-          idf.py build
+          # 核心修改：强制把默认板型替换为 OTTO_ROBOT
+          # 如果你的 sdkconfig.defaults 里有默认板型，这行会替换它；如果没有，它会添加进去
+          sed -i 's/CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD=y/CONFIG_BOARD_TYPE_OTTO_ROBOT=y/g' sdkconfig.defaults || true
+          echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
           
-          # 打包合并成一个单一的固件（方便烧录，只需写入0x0地址）
+          idf.py build
           idf.py merge-bin
           
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-firmware
+          name: esp32s3-otto-firmware
           path: xiaozhi-esp32/build/merged-binary.bin
