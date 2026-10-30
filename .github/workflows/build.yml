@@ -8,7 +8,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container: espressif/idf:latest 
+    # 使用你指定的 v6.0.2 版本镜像
+    container: espressif/idf:release-v6.0.2
     
     steps:
       - name: Checkout code
@@ -19,14 +20,20 @@ jobs:
           . $IDF_PATH/export.sh
           cd xiaozhi-esp32
           
+          # 1. 指定目标芯片
           idf.py set-target esp32s3
           
-          # 核心修改：强制把默认板型替换为 OTTO_ROBOT
-          # 如果你的 sdkconfig.defaults 里有默认板型，这行会替换它；如果没有，它会添加进去
+          # 2. 终极防错：删除旧的 sdkconfig，确保修改生效
+          rm -f sdkconfig
+          
+          # 3. 核心修改：强制把默认板型替换为 OTTO_ROBOT
           sed -i 's/CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI_LCD=y/CONFIG_BOARD_TYPE_OTTO_ROBOT=y/g' sdkconfig.defaults || true
           echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
           
+          # 4. 开始编译
           idf.py build
+          
+          # 5. 合并成单一固件（方便烧录）
           idf.py merge-bin
           
       - name: Upload Artifacts
