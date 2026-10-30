@@ -8,8 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 使用你指定的 v6.0.2 版本镜像
-    container: espressif/idf:release-v6.0.2
+    container: espressif/idf:release-v5.2  # 固定版本，避免最新版环境变动导致报错
     
     steps:
       - name: Checkout code
