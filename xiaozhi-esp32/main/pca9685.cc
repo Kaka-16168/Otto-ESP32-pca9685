@@ -39,7 +39,7 @@ esp_err_t Pca9685::Init() {
     // 1. 初始化 I2C 总线
     i2c_master_bus_config_t i2c_mst_config = {};
     i2c_mst_config.clk_source = I2C_CLK_SRC_DEFAULT;
-    i2c_mst_config.i2c_port = I2C_NUM_0; 
+    i2c_mst_config.i2c_port = I2C_NUM_1; 
     i2c_mst_config.scl_io_num = PCA9685_I2C_SCL_PIN;
     i2c_mst_config.sda_io_num = PCA9685_I2C_SDA_PIN;
     i2c_mst_config.glitch_ignore_cnt = 7;
