@@ -20,6 +20,15 @@ WebSocketControlServer::~WebSocketControlServer() {
     instance_ = nullptr;
 }
 
+// --- 新增：处理杂项探测请求，消除 404 报错 ---
+static esp_err_t catch_all_handler(httpd_req_t *req) {
+    // 返回一个简单的响应，让客户端知道请求被收到了
+    // 这样设备串口就不会再疯狂刷 404 Not Found 报错了
+    httpd_resp_send(req, "OK", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+// ---------------------------------------------
+
 esp_err_t WebSocketControlServer::ws_handler(httpd_req_t *req) {
     if (instance_ == nullptr) {
         return ESP_FAIL;
@@ -90,6 +99,7 @@ bool WebSocketControlServer::Start(int port) {
     config.max_open_sockets = 7;
     config.ctrl_port = 32769;
 
+    // 原有 WebSocket 路由
     httpd_uri_t ws_uri = {
         .uri = "/ws",
         .method = HTTP_GET,
@@ -98,8 +108,31 @@ bool WebSocketControlServer::Start(int port) {
         .is_websocket = true
     };
 
+    // --- 新增：注册拦截路由 ---
+    // 拦截 /mmttls/* 以及根路径下的其他未定义请求，防止刷屏
+    httpd_uri_t mmttls_uri = {
+        .uri = "/mmttls/*",
+        .method = HTTP_GET,
+        .handler = catch_all_handler,
+        .user_ctx = nullptr
+    };
+    
+    httpd_uri_t favicon_uri = {
+        .uri = "/favicon.ico",
+        .method = HTTP_GET,
+        .handler = catch_all_handler,
+        .user_ctx = nullptr
+    };
+    // ---------------------------
+
     if (httpd_start(&server_handle_, &config) == ESP_OK) {
+        // 注册原有 WebSocket
         httpd_register_uri_handler(server_handle_, &ws_uri);
+        
+        // 注册新增的拦截器
+        httpd_register_uri_handler(server_handle_, &mmttls_uri);
+        httpd_register_uri_handler(server_handle_, &favicon_uri);
+        
         ESP_LOGI(TAG, "WebSocket server started on port %d", port);
         return true;
     }
