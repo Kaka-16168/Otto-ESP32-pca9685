@@ -1,0 +1,51 @@
+name: Build Otto Robot Firmware
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: 
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: espressif/idf:v6.0.1 
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build Firmware
+        run: |
+          . $IDF_PATH/export.sh
+          cd xiaozhi-esp32
+          
+          # 清理旧配置，确保新参数强制生效
+          rm -f sdkconfig
+          
+          # 1. 核心板型与功能 (自动锁定 Otto Robot)
+          echo "CONFIG_BOARD_TYPE_OTTO_ROBOT=y" >> sdkconfig.defaults
+          echo "CONFIG_HTTPD_WS_SUPPORT=y" >> sdkconfig.defaults
+          
+          # 2. 内存防重启配置 (N16R8 必开 8MB PSRAM)
+          echo "CONFIG_SPIRAM=y" >> sdkconfig.defaults
+          echo "CONFIG_SPIRAM_MODE_OCT=y" >> sdkconfig.defaults
+          echo "CONFIG_SPIRAM_SPEED_80M=y" >> sdkconfig.defaults
+          
+          # 3. 防止花屏配置 (全局降低 SPI 速率保护)
+          echo "CONFIG_SPI_MASTER_ISR_IN_IRAM=y" >> sdkconfig.defaults
+          
+          # 4. 清理并编译
+          idf.py set-target esp32s3
+          idf.py build
+          idf.py merge-bin
+          
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: otto-esp32s3-firmware
+          # ⚠️ 注意：这里结尾的中文句号“。”我已经帮你删掉了，防止找不到文件
+          path: xiaozhi-esp32/build/merged-binary.bin
+          if-no-files-found: error
